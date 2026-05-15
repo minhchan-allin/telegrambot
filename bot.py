@@ -1,29 +1,27 @@
 """
-Telegram News Bot
-- Copy truc tiep media (anh/video) khong qua download
-- Moi 50 tin gui 1 lan button Chat
+Telegram News Bot - Dung environment variables
 """
 
 import asyncio
 import logging
+import os
 import sys
 import io
 from telethon import TelegramClient, Button
 from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
-from config import (
-    API_ID, API_HASH, PHONE_NUMBER,
-    CHANNEL_ID, SOURCE_CHANNELS, ZALO_LINK
-)
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# Lay config tu environment variables (Railway)
+API_ID = int(os.environ['API_ID'])
+API_HASH = os.environ['API_HASH']
+PHONE_NUMBER = os.environ['PHONE_NUMBER']
+CHANNEL_ID = int(os.environ['CHANNEL_ID'])
+SOURCE_CHANNELS = os.environ['SOURCE_CHANNELS'].split(',')
+ZALO_LINK = os.environ['ZALO_LINK']
+SESSION_STRING = os.environ.get('SESSION_STRING', '')
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -34,41 +32,25 @@ BUTTON_EVERY = 50
 
 
 async def send_msg(client, msg, text, buttons=None):
-    """Gui tin - dung media goc truc tiep, khong download"""
     try:
         has_media = msg.media and isinstance(
             msg.media, (MessageMediaPhoto, MessageMediaDocument)
         )
-
         if has_media:
-            # Dung media object goc truc tiep, giu nguyen chat luong
             await client.send_file(
-                CHANNEL_ID,
-                msg.media,          # Dung truc tiep, khong download
+                CHANNEL_ID, msg.media,
                 caption=text,
                 buttons=buttons,
-                supports_streaming=True  # Ho tro stream video
+                supports_streaming=True
             )
-            logger.info("Gui media goc OK!")
         else:
-            await client.send_message(
-                CHANNEL_ID, text,
-                buttons=buttons
-            )
-            logger.info("Gui text OK!")
-
+            await client.send_message(CHANNEL_ID, text, buttons=buttons)
     except Exception as e:
         logger.error(f"Loi gui: {e}")
-        # Fallback: gui text thoi
-        try:
-            await client.send_message(CHANNEL_ID, text, buttons=buttons)
-        except:
-            pass
 
 
 async def check_channel(client, channel):
     global msg_count
-
     try:
         msgs = await client.get_messages(channel, limit=5)
 
@@ -93,9 +75,6 @@ async def check_channel(client, channel):
             logger.info(f"[{channel}] Tin #{msg_count}: {text[:60]}...")
 
             buttons = CHAT_BUTTON if msg_count % BUTTON_EVERY == 0 else None
-            if buttons:
-                logger.info(f"Tin thu {msg_count} - Them button Chat!")
-
             await send_msg(client, msg, text, buttons)
             await asyncio.sleep(2)
 
@@ -106,8 +85,12 @@ async def check_channel(client, channel):
 async def main():
     logger.info("Khoi dong bot...")
 
-    client = TelegramClient('user_session', API_ID, API_HASH)
-    await client.start(phone=PHONE_NUMBER)
+    # Dung session string de khong can login lai
+    from telethon.sessions import StringSession
+    client = TelegramClient(
+        StringSession(SESSION_STRING), API_ID, API_HASH
+    )
+    await client.start()
 
     logger.info("Ket noi OK!")
     logger.info(f"Theo doi: {SOURCE_CHANNELS}")
